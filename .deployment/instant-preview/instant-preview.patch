@@ -1,6 +1,6 @@
 diff --git a/src/app/api/preview/[repository]/route.ts b/src/app/api/preview/[repository]/route.ts
 new file mode 100644
-index 0000000..58f07b6
+index 0000000..0b5317c
 --- /dev/null
 +++ b/src/app/api/preview/[repository]/route.ts
 @@ -0,0 +1,42 @@
@@ -11,7 +11,7 @@ index 0000000..58f07b6
 +	extractPrismicHostFromPreviewToken,
 +	isValidRepositoryName,
 +	previewTokenMatchesRepository,
-+} from "@/lib/repository"
++} from "@/lib/instant-preview"
 +import { createInstantStartClient } from "@/prismicio"
 +
 +type RouteParams = {
@@ -78,10 +78,10 @@ index 0000000..b0277f3
 +}
 diff --git a/src/app/instant-preview/[repository]/page.tsx b/src/app/instant-preview/[repository]/page.tsx
 new file mode 100644
-index 0000000..6b15678
+index 0000000..93ea3c6
 --- /dev/null
 +++ b/src/app/instant-preview/[repository]/page.tsx
-@@ -0,0 +1,72 @@
+@@ -0,0 +1,75 @@
 +import { cookie as prismicCookie } from "@prismicio/client"
 +import { type Metadata } from "next"
 +import { cookies } from "next/headers"
@@ -94,7 +94,7 @@ index 0000000..6b15678
 +	extractPrismicHostFromPreviewToken,
 +	isValidRepositoryName,
 +	resolvePreviewTokenFromCookieValue,
-+} from "@/lib/repository"
++} from "@/lib/instant-preview"
 +import { createInstantStartClient } from "@/prismicio"
 +import { components } from "@/slices"
 +
@@ -108,12 +108,15 @@ index 0000000..6b15678
 +	}>
 +}
 +
-+async function getPrismicHost() {
++async function getPrismicHost(repository: string) {
 +	const cookieStore = await cookies()
 +	const previewTokenCookie = cookieStore.get(prismicCookie.preview)?.value
 +	if (!previewTokenCookie) return undefined
 +
-+	const token = resolvePreviewTokenFromCookieValue(previewTokenCookie)
++	const token = resolvePreviewTokenFromCookieValue(
++		previewTokenCookie,
++		repository,
++	)
 +	if (!token) return undefined
 +
 +	return extractPrismicHostFromPreviewToken(token)
@@ -126,7 +129,7 @@ index 0000000..6b15678
 +		notFound()
 +	}
 +
-+	const prismicHost = await getPrismicHost()
++	const prismicHost = await getPrismicHost(repository)
 +	const client = createInstantStartClient({ repository, prismicHost })
 +	const page = await client.getSingle<HomepageDocument>("homepage")
 +
@@ -145,7 +148,7 @@ index 0000000..6b15678
 +		return {}
 +	}
 +
-+	const prismicHost = await getPrismicHost()
++	const prismicHost = await getPrismicHost(repository)
 +	const client = createInstantStartClient({ repository, prismicHost })
 +	const page = await client.getSingle<HomepageDocument>("homepage")
 +
@@ -173,12 +176,12 @@ index 4e6b6bb..5f005ee 100644
  			</body>
  		</html>
  	)
-diff --git a/src/lib/repository.ts b/src/lib/repository.ts
+diff --git a/src/lib/instant-preview.ts b/src/lib/instant-preview.ts
 new file mode 100644
-index 0000000..b7d6b19
+index 0000000..fb6919d
 --- /dev/null
-+++ b/src/lib/repository.ts
-@@ -0,0 +1,91 @@
++++ b/src/lib/instant-preview.ts
+@@ -0,0 +1,102 @@
 +export function isValidRepositoryName(label: string): boolean {
 +	return /^[a-z0-9]{8}$/.test(label)
 +}
@@ -204,14 +207,19 @@ index 0000000..b7d6b19
 +	return value.includes("/previews/")
 +}
 +
-+function extractPreviewRefFromToolbarCookie(value: object): string | undefined {
++function extractPreviewRefFromToolbarCookie(
++	value: object,
++	repositoryName?: string,
++): string | undefined {
 +	for (const entry of Object.values(value)) {
 +		if (
 +			entry &&
 +			typeof entry === "object" &&
 +			"preview" in entry &&
 +			typeof entry.preview === "string" &&
-+			isPreviewRef(entry.preview)
++			isPreviewRef(entry.preview) &&
++			(!repositoryName ||
++				previewTokenMatchesRepository(entry.preview, repositoryName))
 +		) {
 +			return entry.preview
 +		}
@@ -222,6 +230,7 @@ index 0000000..b7d6b19
 +
 +export function resolvePreviewTokenFromCookieValue(
 +	value: string | undefined,
++	repositoryName?: string,
 +): string | undefined {
 +	if (!value) return undefined
 +
@@ -229,13 +238,18 @@ index 0000000..b7d6b19
 +	try {
 +		const data = JSON.parse(value)
 +		if (data && typeof data === "object" && !Array.isArray(data)) {
-+			return extractPreviewRefFromToolbarCookie(data)
++			return extractPreviewRefFromToolbarCookie(data, repositoryName)
 +		}
 +	} catch {
 +		// Not JSON — fall through to the legacy raw URL shape.
 +	}
 +
-+	if (isPreviewRef(value)) return value
++	if (
++		isPreviewRef(value) &&
++		(!repositoryName || previewTokenMatchesRepository(value, repositoryName))
++	) {
++		return value
++	}
 +
 +	return undefined
 +}

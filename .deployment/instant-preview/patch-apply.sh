@@ -14,7 +14,7 @@ fi
 
 if ! git apply --check "${PATCH_FILE}" 2>/dev/null; then
 	echo "Instant preview patch conflicts with the current starter src/." >&2
-	echo "Regenerate .deployment/instant-preview/instant-preview.patch after updating src/." >&2
+	echo "Regenerate the patch file after updating src/." >&2
 	exit 1
 fi
 
