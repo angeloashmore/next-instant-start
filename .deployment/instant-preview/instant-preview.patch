@@ -105,25 +105,25 @@ index 4e6b6bb..64a498e 100644
  		</html>
  	)
 diff --git a/src/app/page.tsx b/src/app/page.tsx
-index 4f649d3..04bffdf 100644
+index caa1d1f..70cca72 100644
 --- a/src/app/page.tsx
 +++ b/src/app/page.tsx
-@@ -7,7 +7,7 @@ import { createClient } from "@/prismicio"
- import { components } from "@/slices"
+@@ -9,7 +9,7 @@ import { components } from "@/slices"
+ import type { HomepageDocument } from "../../prismicio-types"
  
  export default async function Home() {
 -	const client = createClient()
 +	const client = await createClient()
- 	const page = await client.getSingle("homepage")
+ 	const page = await client.getSingle<HomepageDocument>("homepage")
  
  	return (
-@@ -19,7 +19,7 @@ export default async function Home() {
+@@ -21,7 +21,7 @@ export default async function Home() {
  }
  
  export async function generateMetadata(): Promise<Metadata> {
 -	const client = createClient()
 +	const client = await createClient()
- 	const page = await client.getSingle("homepage")
+ 	const page = await client.getSingle<HomepageDocument>("homepage")
  
  	return {
 diff --git a/src/lib/instant-preview.ts b/src/lib/instant-preview.ts
