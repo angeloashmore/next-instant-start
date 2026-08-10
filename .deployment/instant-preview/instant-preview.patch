@@ -294,27 +294,45 @@ index 0000000..e1af03b
 +	return resolveInstantStartPreviewContextFromToken(previewToken)
 +}
 diff --git a/src/prismicio.ts b/src/prismicio.ts
-index 266a841..f5c1bb7 100644
+index 1f5514b..5c6e47c 100644
 --- a/src/prismicio.ts
 +++ b/src/prismicio.ts
-@@ -5,9 +5,16 @@ import {
- import { enableAutoPreviews } from "@prismicio/next"
- import prismicConfig from "../prismic.config.json"
+@@ -1,47 +1,80 @@
+ import {
+-	createClient as baseCreateClient,
+-	RequestInitLike,
+-	type ClientConfig,
+-} from "@prismicio/client"
+-import { enableAutoPreviews } from "@prismicio/next"
+-import prismicConfig from "../prismic.config.json"
++  createClient as baseCreateClient,
++  RequestInitLike,
++  type ClientConfig,
++} from "@prismicio/client";
++import { enableAutoPreviews } from "@prismicio/next";
++import prismicConfig from "../prismic.config.json";
  
-+import { resolveInstantStartPreviewContext } from "@/lib/instant-preview"
+-type PrismicConfig = typeof prismicConfig &
+-	Pick<ClientConfig, "documentAPIEndpoint">
++import {
++  InstantStartPreviewContext,
++  resolveInstantStartPreviewContext,
++} from "@/lib/instant-preview";
 +
- type PrismicConfig = typeof prismicConfig &
- 	Pick<ClientConfig, "documentAPIEndpoint">
- 
++type PrismicConfig = typeof prismicConfig & Pick<ClientConfig, "documentAPIEndpoint">;
++
 +type CreateClientConfig = ClientConfig & {
-+	repository?: string
-+	prismicHost?: string
-+}
-+
++  repository?: string;
++  prismicHost?: string;
++};
+ 
  /**
   * The project's Prismic repository name.
   */
-@@ -17,23 +24,48 @@ export const repositoryName = prismicConfig.repositoryName
+-export const repositoryName = prismicConfig.repositoryName
++export const repositoryName = prismicConfig.repositoryName;
+ 
+ /**
   * Creates a Prismic client for the project's repository. The client is used to
   * query content from the Prismic API.
   *
@@ -323,49 +341,74 @@ index 266a841..f5c1bb7 100644
 + * present, the client targets that tenant repository and platform CDN.
   */
 -export const createClient = (config: ClientConfig = {}) => {
-+export async function createClient(config: CreateClientConfig = {}) {
-+	const {
-+		repository: repositoryOverride,
-+		prismicHost: prismicHostOverride,
-+		...clientConfig
-+	} = config
-+
- 	const typedPrismicConfig = prismicConfig as PrismicConfig
-+	const previewContext =
-+		repositoryOverride ?
-+			{
-+				repository: repositoryOverride,
-+				prismicHost: prismicHostOverride,
-+			}
-+		:	await resolveInstantStartPreviewContext()
-+
-+	const isInstantStartPreview = Boolean(previewContext)
-+	const repository = previewContext?.repository ?? repositoryName
- 
- 	const staticConfig: ClientConfig = { routes: typedPrismicConfig.routes }
+-	const typedPrismicConfig = prismicConfig as PrismicConfig
+-
+-	const staticConfig: ClientConfig = { routes: typedPrismicConfig.routes }
 -	if (typedPrismicConfig.documentAPIEndpoint) {
-+
-+	if (previewContext?.prismicHost) {
-+		staticConfig.documentAPIEndpoint = `https://${repository}.cdn.${previewContext.prismicHost}/api/v2`
-+	} else if (
-+		!isInstantStartPreview &&
-+		typedPrismicConfig.documentAPIEndpoint
-+	) {
- 		staticConfig.documentAPIEndpoint = typedPrismicConfig.documentAPIEndpoint
- 	}
- 
+-		staticConfig.documentAPIEndpoint = typedPrismicConfig.documentAPIEndpoint
+-	}
+-
+-	let fetchOptions: RequestInitLike
+-	if (process.env.NODE_ENV === "production") {
+-		fetchOptions = { next: { tags: ["prismic"] }, cache: "force-cache" }
+-	} else {
+-		fetchOptions = { next: { revalidate: 5 } }
+-	}
+-
 -	const client = baseCreateClient(repositoryName, {
-+	const client = baseCreateClient(repository, {
- 		...staticConfig,
- 		fetchOptions:
--			process.env.NODE_ENV === "production" ?
-+			isInstantStartPreview ?
-+				{ cache: "no-store" }
-+			: process.env.NODE_ENV === "production" ?
- 				{ next: { tags: ["prismic"] }, cache: "force-cache" }
- 			:	{ next: { revalidate: 5 } },
+-		...staticConfig,
+-		fetchOptions,
 -		...config,
-+		...clientConfig,
- 	})
- 
- 	enableAutoPreviews({ client })
+-	})
+-
+-	enableAutoPreviews({ client })
+-
+-	return client
++export async function createClient(config: CreateClientConfig = {}) {
++  const {
++    repository: repositoryOverride,
++    prismicHost: prismicHostOverride,
++    ...clientConfig
++  } = config;
++
++  const typedPrismicConfig = prismicConfig as PrismicConfig;
++
++  let previewContext: InstantStartPreviewContext | undefined;
++  if (repositoryOverride) {
++    previewContext = {
++      repository: repositoryOverride,
++      prismicHost: prismicHostOverride,
++    };
++  } else {
++    previewContext = await resolveInstantStartPreviewContext();
++  }
++
++  const isInstantStartPreview = Boolean(previewContext);
++  const repository = previewContext?.repository ?? repositoryName;
++
++  const staticConfig: ClientConfig = { routes: typedPrismicConfig.routes };
++  if (previewContext?.prismicHost) {
++    staticConfig.documentAPIEndpoint = `https://${repository}.cdn.${previewContext.prismicHost}/api/v2`;
++  } else if (!isInstantStartPreview && typedPrismicConfig.documentAPIEndpoint) {
++    staticConfig.documentAPIEndpoint = typedPrismicConfig.documentAPIEndpoint;
++  }
++
++  let fetchOptions: RequestInitLike;
++  if (isInstantStartPreview) {
++    fetchOptions = { cache: "no-store" };
++  } else if (process.env.NODE_ENV === "production") {
++    fetchOptions = { next: { tags: ["prismic"] }, cache: "force-cache" };
++  } else {
++    fetchOptions = { next: { revalidate: 5 } };
++  }
++
++  const client = baseCreateClient(repository, {
++    ...staticConfig,
++    fetchOptions,
++    ...clientConfig,
++  });
++
++  enableAutoPreviews({ client });
++
++  return client;
+ }
