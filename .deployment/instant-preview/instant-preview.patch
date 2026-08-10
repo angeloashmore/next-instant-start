@@ -1,65 +1,79 @@
 diff --git a/src/app/api/preview/[repository]/route.ts b/src/app/api/preview/[repository]/route.ts
 new file mode 100644
-index 0000000..aab817e
+index 0000000..8b8ddd5
 --- /dev/null
 +++ b/src/app/api/preview/[repository]/route.ts
-@@ -0,0 +1,42 @@
-+import { redirectToPreviewURL } from "@prismicio/next"
-+import { NextRequest, NextResponse } from "next/server"
+@@ -0,0 +1,32 @@
++import { redirectToPreviewURL } from "@prismicio/next";
++import { NextRequest, NextResponse } from "next/server";
 +
 +import {
-+	extractPrismicHostFromPreviewToken,
-+	isValidRepositoryName,
-+	previewTokenMatchesRepository,
-+} from "@/lib/instant-preview"
-+import { createClient } from "@/prismicio"
++  extractPrismicHostFromPreviewToken,
++  isValidRepositoryName,
++  previewTokenMatchesRepository,
++} from "@/lib/instant-preview";
++import { createClient } from "@/prismicio";
 +
-+type RouteParams = {
-+	params: Promise<{
-+		repository: string
-+	}>
-+}
++export async function GET(
++  request: NextRequest,
++  context: RouteContext<"/api/preview/[repository]">,
++) {
++  const { repository } = await context.params;
 +
-+export async function GET(request: NextRequest, { params }: RouteParams) {
-+	const { repository } = await params
++  if (!isValidRepositoryName(repository)) {
++    return new NextResponse("Repository not found", { status: 404 });
++  }
 +
-+	if (!isValidRepositoryName(repository)) {
-+		return new NextResponse("Repository not found", { status: 404 })
-+	}
++  const token = request.nextUrl.searchParams.get("token");
++  if (token && !previewTokenMatchesRepository(token, repository)) {
++    return new NextResponse("Preview token does not match repository", {
++      status: 403,
++    });
++  }
 +
-+	const previewToken = request.nextUrl.searchParams.get("token")
-+	if (
-+		previewToken &&
-+		!previewTokenMatchesRepository(previewToken, repository)
-+	) {
-+		return new NextResponse("Preview token does not match repository", {
-+			status: 403,
-+		})
-+	}
++  const prismicHost = token ? extractPrismicHostFromPreviewToken(token) : undefined;
++  const client = await createClient({ repository, prismicHost });
 +
-+	const prismicHost =
-+		previewToken ?
-+			extractPrismicHostFromPreviewToken(previewToken)
-+		:	undefined
-+
-+	const client = await createClient({ repository, prismicHost })
-+
-+	return redirectToPreviewURL({ client, request })
++  return redirectToPreviewURL({ client, request });
 +}
 diff --git a/src/app/api/preview/route.ts b/src/app/api/preview/route.ts
-index 47ff6df..b10513a 100644
+index 47ff6df..17e0846 100644
 --- a/src/app/api/preview/route.ts
 +++ b/src/app/api/preview/route.ts
-@@ -4,7 +4,7 @@ import { NextRequest } from "next/server"
+@@ -1,10 +1,29 @@
+ import { redirectToPreviewURL } from "@prismicio/next"
+-import { NextRequest } from "next/server"
++import { NextRequest, NextResponse } from "next/server"
+ 
++import {
++	extractRepositoryFromPreviewToken,
++	isValidRepositoryName,
++} from "@/lib/instant-preview"
  import { createClient } from "@/prismicio"
  
  export async function GET(request: NextRequest) {
 -	const client = createClient()
-+	const client = await createClient()
++	const redirect = handleInstantStartPreview(request)
++	if (redirect) return redirect
  
 -	return await redirectToPreviewURL({ client, request })
++	const client = await createClient()
++
 +	return redirectToPreviewURL({ client, request })
  }
++
++function handleInstantStartPreview(request: NextRequest) {
++	const token = request.nextUrl.searchParams.get("token")
++	if (!token) return undefined
++	
++	const repository = extractRepositoryFromPreviewToken(token)
++	if (!repository || !isValidRepositoryName(repository)) return undefined
++	
++	const url = request.nextUrl.clone()
++	url.pathname = `/api/preview/${repository}`
++	return NextResponse.redirect(url)
++}
+\ No newline at end of file
 diff --git a/src/app/layout.tsx b/src/app/layout.tsx
 index 4e6b6bb..64a498e 100644
 --- a/src/app/layout.tsx
@@ -128,10 +142,10 @@ index caa1d1f..70cca72 100644
  	return {
 diff --git a/src/lib/instant-preview.ts b/src/lib/instant-preview.ts
 new file mode 100644
-index 0000000..5fe866d
+index 0000000..e1af03b
 --- /dev/null
 +++ b/src/lib/instant-preview.ts
-@@ -0,0 +1,158 @@
+@@ -0,0 +1,147 @@
 +import { cookie as prismicCookie } from "@prismicio/client"
 +
 +export type InstantStartPreviewContext = {
@@ -150,10 +164,7 @@ index 0000000..5fe866d
 +		const url = new URL(decodeURIComponent(previewToken))
 +		const hostname = url.hostname
 +		const dotIndex = hostname.indexOf(".")
-+		if (dotIndex <= 0) {
-+			return undefined
-+		}
-+
++		if (dotIndex <= 0) return undefined
 +		return hostname.slice(0, dotIndex)
 +	} catch {
 +		return undefined
@@ -217,29 +228,21 @@ index 0000000..5fe866d
 +	try {
 +		const url = new URL(decodeURIComponent(previewToken))
 +		const repository = extractRepositoryFromPreviewToken(previewToken)
-+		if (!repository) {
-+			return undefined
-+		}
++		if (!repository) return undefined
 +
 +		const cdnPrefix = `${repository}.cdn.`
 +		if (url.hostname.startsWith(cdnPrefix)) {
 +			const host = url.hostname.slice(cdnPrefix.length)
-+			if (host === "prismic.io") {
-+				return undefined
-+			}
++			if (host === "prismic.io") return undefined
 +
 +			return host
 +		}
 +
 +		const repositoryPrefix = `${repository}.`
-+		if (!url.hostname.startsWith(repositoryPrefix)) {
-+			return undefined
-+		}
++		if (!url.hostname.startsWith(repositoryPrefix)) return undefined
 +
 +		const host = url.hostname.slice(repositoryPrefix.length)
-+		if (host === "prismic.io" || host === "cdn.prismic.io") {
-+			return undefined
-+		}
++		if (host === "prismic.io" || host === "cdn.prismic.io") return undefined
 +
 +		return host
 +	} catch {
