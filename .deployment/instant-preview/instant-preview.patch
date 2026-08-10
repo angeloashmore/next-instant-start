@@ -128,10 +128,10 @@ index caa1d1f..70cca72 100644
  	return {
 diff --git a/src/lib/instant-preview.ts b/src/lib/instant-preview.ts
 new file mode 100644
-index 0000000..91bb009
+index 0000000..5fe866d
 --- /dev/null
 +++ b/src/lib/instant-preview.ts
-@@ -0,0 +1,148 @@
+@@ -0,0 +1,158 @@
 +import { cookie as prismicCookie } from "@prismicio/client"
 +
 +export type InstantStartPreviewContext = {
@@ -221,13 +221,23 @@ index 0000000..91bb009
 +			return undefined
 +		}
 +
-+		const prefix = `${repository}.cdn.`
-+		if (!url.hostname.startsWith(prefix)) {
++		const cdnPrefix = `${repository}.cdn.`
++		if (url.hostname.startsWith(cdnPrefix)) {
++			const host = url.hostname.slice(cdnPrefix.length)
++			if (host === "prismic.io") {
++				return undefined
++			}
++
++			return host
++		}
++
++		const repositoryPrefix = `${repository}.`
++		if (!url.hostname.startsWith(repositoryPrefix)) {
 +			return undefined
 +		}
 +
-+		const host = url.hostname.slice(prefix.length)
-+		if (host === "prismic.io") {
++		const host = url.hostname.slice(repositoryPrefix.length)
++		if (host === "prismic.io" || host === "cdn.prismic.io") {
 +			return undefined
 +		}
 +
