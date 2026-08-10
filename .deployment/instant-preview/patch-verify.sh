@@ -6,7 +6,6 @@ cd "${ROOT}"
 
 instant_preview_paths=(
 	"src/lib/instant-preview.ts"
-	"src/app/instant-preview"
 	"src/app/api/preview/[repository]"
 )
 
