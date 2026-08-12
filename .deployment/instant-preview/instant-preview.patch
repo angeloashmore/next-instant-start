@@ -142,11 +142,11 @@ index caa1d1f..70cca72 100644
  	return {
 diff --git a/src/lib/instant-preview.ts b/src/lib/instant-preview.ts
 new file mode 100644
-index 0000000..a3917c0
+index 0000000..4d71543
 --- /dev/null
 +++ b/src/lib/instant-preview.ts
-@@ -0,0 +1,171 @@
-+import { cookie as prismicCookie } from "@prismicio/client"
+@@ -0,0 +1,169 @@
++import { cookie as prismicCookie, type ClientConfig } from "@prismicio/client"
 +
 +export type InstantStartPreviewContext = {
 +	repository: string
@@ -294,17 +294,15 @@ index 0000000..a3917c0
 +	return resolveInstantStartPreviewContextFromToken(previewToken)
 +}
 +
-+type FetchLike = typeof fetch
++type FetchLike = NonNullable<ClientConfig["fetch"]>
 +
 +export function withInstantStartPreviewAttribution(
 +	baseFetch?: FetchLike,
 +): FetchLike {
-+	const fetchImpl = baseFetch ?? fetch
++	const fetchImpl: FetchLike = baseFetch ?? fetch
 +
 +	return (input, init) => {
-+		const urlObject = new URL(
-+			input instanceof Request ? input.url : input,
-+		)
++		const urlObject = new URL(input)
 +
 +		const xC = urlObject.searchParams.get("x-c")
 +		if (xC) {
