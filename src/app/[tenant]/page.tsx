@@ -3,11 +3,12 @@ import { type Metadata } from "next"
 import { SliceZone } from "@prismicio/react"
 
 import { Footer } from "@/components/Footer"
-import { createClient } from "@/prismicio"
+import { createClient } from "@/prismicio.tenant"
 import { components } from "@/slices"
 
-export default async function Home() {
-	const client = createClient()
+export default async function Home(props: PageProps<"/[tenant]">) {
+	const { tenant } = await props.params
+	const client = createClient(tenant)
 	const page = await client.getSingle("homepage")
 
 	return (
@@ -18,8 +19,11 @@ export default async function Home() {
 	)
 }
 
-export async function generateMetadata(): Promise<Metadata> {
-	const client = createClient()
+export async function generateMetadata(
+	props: PageProps<"/[tenant]">,
+): Promise<Metadata> {
+	const { tenant } = await props.params
+	const client = createClient(tenant)
 	const page = await client.getSingle("homepage")
 
 	return {
